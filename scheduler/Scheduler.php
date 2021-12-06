@@ -81,12 +81,14 @@ class Scheduler
 
     public static function signalHandler($signo)
     {
-        getLogger()->info("received %d signal", $signo);
+        getLogger()->info("received signal %d", $signo);
         switch ($signo) {
             case SIGTERM:
             case SIGINT:
                 static::getDefault()->stop();
                 break;
+            default:
+                return;
         }
     }
 
@@ -94,8 +96,10 @@ class Scheduler
     {
         while (!$this->task_queue->isEmpty()) {
             $task = $this->task_queue->dequeue();
-            getLogger()->info("remove unfinied task: " . $task);
+            getLogger()->info("remove unfinished task: " . $task);
         }
+        //正常退出
+        exit(0);
     }
 }
 
