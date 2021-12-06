@@ -42,7 +42,6 @@ class Logger
             return;
         }
         $message = sprintf("[pid:%s]\t[%s]\t[%s]\t%s\n", posix_getpid(), (new \DateTime())->format("Y-m-d H:i:s.u"), strtoupper($level), sprintf($format, ...$args));
-        $message = str_replace("\r", "^I", $message);
         $this->coroutine->send($message);
     }
 
@@ -58,19 +57,6 @@ class Logger
         return $this->log($name, ...$args);
     }
 
-    public function fatal(...$args)
-    {
-        $this->log('fatal', ...$args);
-        exit(127);
-    }
-
-    public function fatalIf(bool $flag, ...$args)
-    {
-        if ($flag) {
-            $this->fatal(...$args);
-        }
-    }
-
     public function fatalIfSocketError($sock = null)
     {
         if (null === $sock) {
@@ -78,13 +64,9 @@ class Logger
         } else {
             $last_error = socket_last_error($sock);
         }
-        return $this->fatalIf($last_error !== 0, "socket_error:#%d(%s)", $last_error, socket_strerror($last_error));
-    }
-
-    public function errorIf(bool $flag, ...$args)
-    {
-        if ($flag) {
-            $this->error(...$args);
+        if ($last_error !== 0) {
+            $this->fatal("socket_error:#%d(%s)", $last_error, socket_strerror($last_error));
+            exit(1);
         }
     }
 
@@ -95,16 +77,8 @@ class Logger
         } else {
             $last_error = socket_last_error($sock);
         }
-        return $this->errorIf($last_error !== 0, "socket_error:#%d(%s)", $last_error, socket_strerror($last_error));
-    }
-
-    public function infoException(Exception $e)
-    {
-        $this->log('info', "catch exception " . $e->getMessage());
-    }
-
-    public function errorException(Exception $e)
-    {
-        $this->log('error', "catch exception " . $e->getMessage());
+        if ($last_error !== 0) {
+            $this->error("socket_error:#%d(%s)", $last_error, socket_strerror($last_error));
+        }
     }
 }
