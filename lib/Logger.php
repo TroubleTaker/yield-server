@@ -81,4 +81,9 @@ class Logger
             $this->error("socket_error:#%d(%s)", $last_error, socket_strerror($last_error));
         }
     }
+
+    public function errorException(Exception $e)
+    {
+        $this->error("catch exception " . $e->getMessage());
+    }
 }

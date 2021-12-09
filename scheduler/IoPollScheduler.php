@@ -15,11 +15,11 @@ class IoPollScheduler extends Scheduler
                 $task   = $this->task_queue->dequeue();
                 $retval = $task->run();
                 if (is_callable($retval)) {
-                    //有回调的，执行回调，不再加到自动调度队列
+                    //如果有回调，则表示协程内会出现 io 阻塞，因此不放入队列
                     getLogger()->info("[TASK_CALLBACK] task:%s", $task);
                     $retval($this, $task);
                 } else {
-                    //自动调度
+                    //当协程还没有执行完成时，重新放入调度队列
                     if (!$task->isFinished()) {
                         $this->schedule($task);
                     }
@@ -36,6 +36,11 @@ class IoPollScheduler extends Scheduler
         $this->terminalAllTask();
     }
 
+    /**
+     * 监听两个队列 $socket 的状态
+     * 如果可读 or 可写，就把 socket 相关的协程添加到调度队列
+     * @param $timeout
+     */
     public function ioPoll($timeout)
     {
         $r_sock = array_column($this->read_socket_wait_list, 'socket');
@@ -73,6 +78,13 @@ class IoPollScheduler extends Scheduler
         }
     }
 
+    /**
+     * ioPollTask 是一个比较重要的协程
+     * 主要是为了监听 socket 等待队列是否可读可写，如果可读可写，则把对应协程重新放入调度队列
+     * ioPollTask 会一直存在于队列里，如果没有其他的协程了，那么会阻塞在 select
+     * 如果有其他的协程，则会和其他的协程一起轮流执行
+     * @return Generator
+     */
     public function ioPollTask()
     {
         while (true) {
@@ -85,6 +97,11 @@ class IoPollScheduler extends Scheduler
         }
     }
 
+    /**
+     * 把 $socket 添加到写等待队列
+     * @param $socket
+     * @param Task $task
+     */
     public function waitForWrite($socket, Task $task)
     {
         $socket_key = (int)$socket;
@@ -98,6 +115,11 @@ class IoPollScheduler extends Scheduler
         getLogger()->debug("[waitForWrite] task:%s socket:%d", $task, $socket);
     }
 
+    /**
+     * 把 $socket 添加到读等待队列
+     * @param $socket
+     * @param Task $task
+     */
     public function waitForRead($socket, Task $task)
     {
         $socket_key = (int)$socket;

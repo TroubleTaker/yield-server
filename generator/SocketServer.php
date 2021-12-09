@@ -50,6 +50,7 @@ function handleClient($sock)
         while (true) {
             yield $sock;
             $buf = socket_read($sock, 2048);
+            getLogger()->errorIfSocketError();
             if ($buf === '') {
                 getLogger()->info("Client has disconnected! %s:%s", $peer_addr, $peer_port);
                 break;
@@ -62,6 +63,7 @@ function handleClient($sock)
             $resp = "OK\n";
             yield $sock;
             socket_write($sock, $resp, strlen($resp));
+            getLogger()->errorIfSocketError();
         }
     } catch (\Exception $e) {
         getLogger()->errorException($e);

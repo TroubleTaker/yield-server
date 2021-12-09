@@ -17,7 +17,7 @@ class SocketServerV2
             getLogger()->info(__method__ . " at %s:%d SOCKET[#%d]", $host, $port, $socket);
 
             while (true) {
-                //让出cpu，等有链接来了再往下执行
+                //yield 一个闭包，主要是为了把 $socket 传给外部的调度器
                 yield $this->waitForRead($socket);
                 $conn = socket_accept($socket);
                 if (false === $conn) {
@@ -51,31 +51,17 @@ class SocketServerV2
             socket_set_nonblock($sock);
             while (true) {
                 yield $this->waitForRead($sock);
-                $buf      = '';
-                $recv_len = socket_recv($sock, $buf, 409600, MSG_DONTWAIT);
-                if (false === $recv_len) {
-                    if (SOCKET_EAGAIN === socket_last_error()) {
-                        //没有数据到来
-                        getLogger()->debug("socket recv empty on %s:%d!", $peer_addr, $peer_port);
-                        continue;
-                    } else {
-                        getLogger()->errorIfSocketError();
-                        break;
-                    }
+                $buf = socket_read($sock, 2048);
+                getLogger()->errorIfSocketError();
+                if ($buf === '') {
+                    getLogger()->info("Client has disconnected! %s:%s", $peer_addr, $peer_port);
+                    break;
                 }
-                getLogger()->info("[SOCKET_RECV] socket:%d content:%s", intval($sock), $buf);
+                getLogger()->info("SOCKET[%d] RECV:%s", intval($sock), $buf);
                 $resp = "OK\n";
                 yield $this->waitForWrite($sock);
-                $send_len = socket_send($sock, $resp, strlen($resp), 0);
-                if (false === $send_len) {
-                    if (SOCKET_EAGAIN === socket_last_error()) {
-                        getLogger()->debug("socket send failed! %s:%d", $peer_addr, $peer_port);
-                    } else {
-                        getLogger()->errorIfSocketError();
-                        break;
-                    }
-                }
-                getLogger()->info("[SOCKET_SEND] socket:%d content:%s", intval($sock), $buf);
+                socket_write($sock, $resp, strlen($resp));
+                getLogger()->errorIfSocketError();
             }
         } catch (\Exception $e) {
             getLogger()->errorException($e);
@@ -85,6 +71,11 @@ class SocketServerV2
         }
     }
 
+    /**
+     * 把 $socket 添加到读等待队列
+     * @param $socket
+     * @return Closure
+     */
     private function waitForRead($socket)
     {
         return function (Scheduler $scheduler, Task $task) use ($socket) {
@@ -92,6 +83,11 @@ class SocketServerV2
         };
     }
 
+    /**
+     * 把 $socket 添加到写等待队列
+     * @param $socket
+     * @return Closure
+     */
     private function waitForWrite($socket)
     {
         return function (Scheduler $scheduler, Task $task) use ($socket) {
